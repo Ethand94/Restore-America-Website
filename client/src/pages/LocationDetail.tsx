@@ -3,11 +3,40 @@ import InspectionQuizCard from "@/components/InspectionQuizCard";
 import LeadContactFormCard from "@/components/LeadContactFormCard";
 import Navbar from "@/components/Navbar";
 import { SERVICE_LOCATIONS, getServiceLocationBySlug } from "@shared/data/locations";
-import { ArrowRight, CheckCircle2, MapPin, Phone, Shield } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronRight, HelpCircle, MapPin, Phone, Shield, Wrench } from "lucide-react";
+import { useState } from "react";
 
 type LocationDetailProps = {
   slug?: string;
 };
+
+function FaqAccordionItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-gray-200 bg-white overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full text-left flex items-start gap-3 p-5 hover:bg-gray-50 transition-colors"
+      >
+        <HelpCircle className="w-5 h-5 text-[#CC2222] flex-shrink-0 mt-0.5" />
+        <span
+          className="text-[#1B3A6B] font-bold text-sm flex-1"
+          style={{ fontFamily: "Oswald, sans-serif", letterSpacing: "0.02em" }}
+        >
+          {question}
+        </span>
+        <ChevronRight
+          className={`w-4 h-4 text-[#CC2222] flex-shrink-0 mt-0.5 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="px-5 pb-5 pl-13">
+          <p className="text-gray-700 text-sm leading-relaxed">{answer}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LocationDetail({ slug }: LocationDetailProps) {
   const location = slug ? getServiceLocationBySlug(slug) : null;
@@ -47,6 +76,7 @@ export default function LocationDetail({ slug }: LocationDetailProps) {
     <div className="min-h-screen" style={{ fontFamily: "Roboto, sans-serif" }}>
       <Navbar />
 
+      {/* Hero */}
       <section
         className="py-20 relative overflow-hidden"
         style={{ background: "linear-gradient(130deg, #0D1F3C 0%, #1B3A6B 65%, #0D1F3C 100%)" }}
@@ -94,6 +124,7 @@ export default function LocationDetail({ slug }: LocationDetailProps) {
         </div>
       </section>
 
+      {/* Inspection Quiz & Contact Form */}
       <section className="py-16" style={{ backgroundColor: "#F4F6F9" }}>
         <div className="container">
           <div className="grid xl:grid-cols-2 gap-8 items-start">
@@ -123,6 +154,50 @@ export default function LocationDetail({ slug }: LocationDetailProps) {
         </div>
       </section>
 
+      {/* Our Services in [City] */}
+      <section className="py-16 bg-white">
+        <div className="container">
+          <div className="text-center mb-10">
+            <h2
+              className="text-[#1B3A6B] text-3xl font-bold"
+              style={{ fontFamily: "Oswald, sans-serif", letterSpacing: "0.03em" }}
+            >
+              OUR {location.city.toUpperCase()} SERVICES
+            </h2>
+            <p className="text-gray-600 mt-3 max-w-2xl mx-auto text-sm leading-relaxed">
+              Restore America provides comprehensive roofing and restoration solutions in {location.city}, {location.stateCode}.
+              Every project includes free inspections, insurance coordination, and quality workmanship.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {location.services.map((service) => (
+              <a
+                key={service.label}
+                href={service.href}
+                className="group flex items-center gap-3 p-5 border border-gray-200 hover:border-[#CC2222]/30 hover:shadow-md transition-all bg-[#FAFBFD]"
+              >
+                <div
+                  className="w-10 h-10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform"
+                  style={{ backgroundColor: "#CC2222" }}
+                >
+                  <Wrench className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <span
+                    className="text-[#1B3A6B] font-bold text-sm block"
+                    style={{ fontFamily: "Oswald, sans-serif", letterSpacing: "0.03em" }}
+                  >
+                    {location.city} {service.label}
+                  </span>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[#CC2222] ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Common Issues & Nearby Areas */}
       <section className="py-16" style={{ backgroundColor: "#F4F6F9" }}>
         <div className="container grid lg:grid-cols-2 gap-8">
           <div className="bg-white p-6 border border-gray-200">
@@ -165,6 +240,33 @@ export default function LocationDetail({ slug }: LocationDetailProps) {
         </div>
       </section>
 
+      {/* City-Specific FAQ */}
+      {location.faqs.length > 0 && (
+        <section className="py-16 bg-white">
+          <div className="container">
+            <div className="max-w-3xl mx-auto">
+              <div className="text-center mb-10">
+                <h2
+                  className="text-[#1B3A6B] text-3xl font-bold"
+                  style={{ fontFamily: "Oswald, sans-serif", letterSpacing: "0.03em" }}
+                >
+                  FREQUENTLY ASKED QUESTIONS IN {location.city.toUpperCase()}
+                </h2>
+                <p className="text-gray-600 mt-3 text-sm leading-relaxed">
+                  Answers to common questions from {location.city} homeowners about roofing, storm damage, and the insurance claim process.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                {location.faqs.map((faq) => (
+                  <FaqAccordionItem key={faq.question} question={faq.question} answer={faq.answer} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Final CTA */}
       <section className="py-14" style={{ backgroundColor: "#0D1F3C" }}>
         <div className="container text-center">
           <h3 className="text-white text-3xl font-bold" style={{ fontFamily: "Oswald, sans-serif" }}>

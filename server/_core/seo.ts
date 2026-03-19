@@ -72,10 +72,24 @@ export function injectLocationSeo(html: string, url: string): string {
     ]
   });
 
+  const faqSchema = location.faqs.length > 0 ? JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": location.faqs.map(faq => ({
+      "@type": "Question",
+      "name": faq.question,
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": faq.answer
+      }
+    }))
+  }) : null;
+
   const schemaScriptTags = `
     <!-- Dynamically Injected Location Schema -->
     <script type="application/ld+json">${localBusinessSchema}</script>
     <script type="application/ld+json">${breadcrumbSchema}</script>
+    ${faqSchema ? `<script type="application/ld+json">${faqSchema}</script>` : ""}
   `;
 
   // String replacement on the static index.html payload
