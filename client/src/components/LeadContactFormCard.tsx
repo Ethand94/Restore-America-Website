@@ -1,4 +1,4 @@
-import { trpc } from "@/lib/trpc";
+import { submitWebsiteIntake } from "@/lib/intake";
 import { CheckCircle2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
@@ -49,6 +49,8 @@ export default function LeadContactFormCard({
   subtitle = "Send your contact details and we will call you back shortly.",
 }: LeadContactFormCardProps) {
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState<LeadContactFormState>({
     name: "",
     phone: "",
@@ -58,8 +60,31 @@ export default function LeadContactFormCard({
     message: "",
   });
 
-  const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: () => {
+  const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!formData.name.trim() || !formData.phone.trim()) return;
+
+    const damageLabel =
+      damageOptions.find((option) => option.id === formData.damageType)?.label ?? "Other";
+
+    const payload = {
+      fullName: formData.name.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim() || undefined,
+      propertyAddress: formData.address.trim() || undefined,
+      damageType: damageLabel,
+      source,
+      message: formData.message.trim() || undefined,
+      formAnswers: {
+        damageType: damageLabel,
+      },
+    };
+
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      await submitWebsiteIntake(payload);
       setSubmitted(true);
       setFormData({
         name: "",
@@ -69,22 +94,11 @@ export default function LeadContactFormCard({
         damageType: "roof",
         message: "",
       });
-    },
-  });
-
-  const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!formData.name.trim() || !formData.phone.trim()) return;
-
-    submitLead.mutate({
-      name: formData.name.trim(),
-      phone: formData.phone.trim(),
-      email: formData.email.trim() || undefined,
-      address: formData.address.trim() || undefined,
-      damageType: formData.damageType,
-      source,
-      notes: formData.message.trim() || undefined,
-    });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit intake.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -177,15 +191,15 @@ export default function LeadContactFormCard({
             />
             <button
               type="submit"
-              disabled={submitLead.isPending}
+              disabled={isSubmitting}
               className="md:col-span-2 text-white py-4 font-bold tracking-widest uppercase transition-opacity hover:opacity-90 disabled:opacity-60"
               style={{ backgroundColor: "#CC2222", fontFamily: "Oswald, sans-serif", letterSpacing: "0.12em" }}
             >
-              {submitLead.isPending ? "SUBMITTING..." : "REQUEST MY FREE INSPECTION"}
+              {isSubmitting ? "SUBMITTING..." : "REQUEST MY FREE INSPECTION"}
             </button>
-            {submitLead.isError && (
+            {submitError && (
               <p className="md:col-span-2 text-red-600 text-xs text-center">
-                Error submitting. Please call 844-LETS-RESTORE directly.
+                {submitError}
               </p>
             )}
           </form>

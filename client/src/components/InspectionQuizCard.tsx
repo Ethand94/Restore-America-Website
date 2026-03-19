@@ -1,4 +1,4 @@
-import { trpc } from "@/lib/trpc";
+import { submitWebsiteIntake } from "@/lib/intake";
 import {
   ArrowRight,
   CheckCircle2,
@@ -13,7 +13,6 @@ import {
 import { type FormEvent, useMemo, useState } from "react";
 
 type DamageType = "hail" | "wind" | "fire" | "flood" | "tree" | "roof" | "other";
-type ClaimStatus = "not_filed" | "open" | "denied" | "paid";
 type LeadSource =
   | "website"
   | "facebook"
@@ -104,16 +103,14 @@ export default function InspectionQuizCard({
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState<QuizFormState>({});
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const currentStep = quizSteps[step];
   const progress = useMemo(
     () => (step / quizSteps.length) * 100,
     [step]
   );
-
-  const submitLead = trpc.leads.submit.useMutation({
-    onSuccess: () => setSubmitted(true),
-  });
 
   const handleSelect = (field: QuizField, value: string) => {
     if (field === "damageType") {
@@ -132,25 +129,39 @@ export default function InspectionQuizCard({
     setTimeout(() => setStep((prev) => Math.min(prev + 1, quizSteps.length - 1)), 300);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formData.name || !formData.phone) return;
 
-    const claimMap: Record<string, ClaimStatus> = {
-      "Not yet — need guidance": "not_filed",
-      "Yes, claim is open": "open",
-      "Claim was denied": "denied",
+    const damageLabel =
+      damageOptions.find((option) => option.id === formData.damageType)?.label ?? "Other";
+
+    const payload = {
+      fullName: formData.name,
+      phone: formData.phone,
+      propertyAddress: formData.address || undefined,
+      damageType: damageLabel,
+      propertyOwner: formData.isOwner,
+      insuranceClaimStatus: formData.claimFiled,
+      source: leadSource,
+      formAnswers: {
+        step1: damageLabel,
+        step2: formData.isOwner,
+        step3: formData.claimFiled,
+      },
     };
 
-    submitLead.mutate({
-      name: formData.name,
-      phone: formData.phone,
-      address: formData.address || undefined,
-      damageType: formData.damageType ?? "other",
-      isOwner: formData.isOwner !== "No, I manage / rent it",
-      claimStatus: claimMap[formData.claimFiled ?? ""] ?? "not_filed",
-      source: leadSource,
-    });
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      await submitWebsiteIntake(payload);
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit intake.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -311,16 +322,16 @@ export default function InspectionQuizCard({
                   />
                   <button
                     type="submit"
-                    disabled={submitLead.isPending}
+                    disabled={isSubmitting}
                     className="text-white py-4 font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-colors mt-1 hover:opacity-90 disabled:opacity-60"
                     style={{ backgroundColor: "#CC2222", fontFamily: "Oswald, sans-serif", letterSpacing: "0.12em" }}
                   >
-                    {submitLead.isPending ? "SUBMITTING..." : "CLAIM MY FREE INSPECTION"}
+                    {isSubmitting ? "SUBMITTING..." : "CLAIM MY FREE INSPECTION"}
                     <ArrowRight className="w-4 h-4" />
                   </button>
-                  {submitLead.isError && (
+                  {submitError && (
                     <p className="text-red-600 text-xs text-center">
-                      Error submitting. Please call 844-LETS-RESTORE directly.
+                      {submitError}
                     </p>
                   )}
                   <p className="text-gray-400 text-xs text-center" style={{ fontFamily: "Roboto, sans-serif" }}>
