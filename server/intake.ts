@@ -3,6 +3,11 @@ import type { InsertLead } from "../drizzle/schema";
 import { createLead, getDb, getLeads } from "./db";
 
 type JsonObject = Record<string, unknown>;
+type ContactConsent = {
+  email?: boolean;
+  text?: boolean;
+  aiAgent?: boolean;
+};
 
 type DamageType = "hail" | "wind" | "fire" | "flood" | "tree" | "roof" | "other";
 type ClaimStatus = "not_filed" | "open" | "denied" | "paid";
@@ -15,6 +20,7 @@ export type NormalizedIntakeLead = {
   lastName?: string;
   phone?: string;
   email?: string;
+  contactConsent?: ContactConsent;
   propertyAddress?: string;
   damageType?: string;
   interest?: string;
@@ -53,6 +59,11 @@ const KNOWN_INTAKE_KEYS = new Set([
   "name",
   "phone",
   "email",
+  "contactConsent",
+  "consentToEmail",
+  "consentToText",
+  "consentToAiContact",
+  "consentToAiAgent",
   "propertyAddress",
   "address",
   "damageType",
@@ -109,6 +120,34 @@ function asRequestString(value: unknown): string | undefined {
   }
 
   return asString(value);
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) {
+      return undefined;
+    }
+    return value !== 0;
+  }
+
+  const normalized = asRequestString(value)?.toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (["true", "1", "yes", "y", "on", "checked"].includes(normalized)) {
+    return true;
+  }
+
+  if (["false", "0", "no", "n", "off", "unchecked"].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
 }
 
 function normalizeOrganizationId(value: unknown): string | undefined {
@@ -200,6 +239,35 @@ function normalizeClaimStatus(rawValue: unknown): string | undefined {
   return asString(rawValue);
 }
 
+function normalizeContactConsent(payload: JsonObject): ContactConsent | undefined {
+  const nestedConsent = isJsonObject(payload.contactConsent) ? payload.contactConsent : undefined;
+  const email = asBoolean(nestedConsent?.email ?? payload.consentToEmail);
+  const text = asBoolean(nestedConsent?.text ?? payload.consentToText);
+  const aiAgent = asBoolean(
+    nestedConsent?.aiAgent ??
+      nestedConsent?.aiContact ??
+      payload.consentToAiContact ??
+      payload.consentToAiAgent
+  );
+
+  if (email === undefined && text === undefined && aiAgent === undefined) {
+    return undefined;
+  }
+
+  const contactConsent: ContactConsent = {};
+  if (email !== undefined) {
+    contactConsent.email = email;
+  }
+  if (text !== undefined) {
+    contactConsent.text = text;
+  }
+  if (aiAgent !== undefined) {
+    contactConsent.aiAgent = aiAgent;
+  }
+
+  return contactConsent;
+}
+
 function extractCustomFields(payload: JsonObject): JsonObject {
   const customFields: JsonObject = {};
 
@@ -257,6 +325,7 @@ function normalizePayload(input: unknown, organizationId: string): IntakeSubmiss
   const insuranceClaimStatus = normalizeClaimStatus(
     payload.insuranceClaimStatus ?? payload.claimStatus
   );
+  const contactConsent = normalizeContactConsent(payload);
   const formAnswers = isJsonObject(payload.formAnswers)
     ? payload.formAnswers
     : undefined;
@@ -270,6 +339,7 @@ function normalizePayload(input: unknown, organizationId: string): IntakeSubmiss
     lastName,
     phone,
     email,
+    contactConsent,
     propertyAddress,
     damageType,
     interest,
@@ -357,8 +427,15 @@ function mapPropertyOwner(value?: string): boolean | undefined {
   return undefined;
 }
 
-function serializeLeadNotes(organizationId: string, message?: string): string | undefined {
+function serializeLeadNotes(
+  organizationId: string,
+  message?: string,
+  contactConsent?: ContactConsent
+): string | undefined {
   const parts = [`[organizationId:${organizationId}]`];
+  if (contactConsent && Object.keys(contactConsent).length > 0) {
+    parts.push(`[contactConsent:${JSON.stringify(contactConsent)}]`);
+  }
   const normalizedMessage = message?.trim();
   if (normalizedMessage) {
     parts.push(normalizedMessage);
@@ -370,23 +447,47 @@ function serializeLeadNotes(organizationId: string, message?: string): string | 
 function deserializeLeadNotes(notes?: string | null): {
   organizationId: string;
   message?: string;
+  contactConsent?: ContactConsent;
 } {
   const normalizedNotes = notes?.trim();
   if (!normalizedNotes) {
     return { organizationId: getDefaultOrganizationId() };
   }
 
-  const match = normalizedNotes.match(/^\[organizationId:([^\]]+)\]\n?([\s\S]*)$/);
-  if (!match) {
-    return {
-      organizationId: getDefaultOrganizationId(),
-      message: normalizedNotes,
-    };
+  let organizationId = getDefaultOrganizationId();
+  let message = normalizedNotes;
+  let contactConsent: ContactConsent | undefined;
+  let didParseHeader = true;
+
+  while (didParseHeader) {
+    didParseHeader = false;
+
+    const organizationMatch = message.match(/^\[organizationId:([^\]]+)\](?:\n|$)/);
+    if (organizationMatch) {
+      organizationId =
+        normalizeOrganizationId(organizationMatch[1]) ?? getDefaultOrganizationId();
+      message = message.slice(organizationMatch[0].length).trimStart();
+      didParseHeader = true;
+      continue;
+    }
+
+    const consentMatch = message.match(/^\[contactConsent:([^\n]+)\](?:\n|$)/);
+    if (consentMatch) {
+      try {
+        const parsedConsent = JSON.parse(consentMatch[1]);
+        contactConsent = normalizeContactConsent({ contactConsent: parsedConsent });
+      } catch {
+        contactConsent = undefined;
+      }
+      message = message.slice(consentMatch[0].length).trimStart();
+      didParseHeader = true;
+    }
   }
 
   return {
-    organizationId: normalizeOrganizationId(match[1]) ?? getDefaultOrganizationId(),
-    message: match[2]?.trim() || undefined,
+    organizationId,
+    message: message.trim() || undefined,
+    contactConsent,
   };
 }
 
@@ -404,7 +505,7 @@ function toDatabaseLead(lead: IntakeLeadRecord): InsertLead {
     isOwner: mapPropertyOwner(lead.propertyOwner),
     claimStatus: mapClaimStatus(lead.insuranceClaimStatus),
     source: mapSource(lead.source),
-    notes: serializeLeadNotes(lead.organizationId, lead.message),
+    notes: serializeLeadNotes(lead.organizationId, lead.message, lead.contactConsent),
     utmSource,
     utmMedium,
     utmCampaign,
@@ -458,6 +559,7 @@ function mapDbLeadToIntakeRecord(dbLead: Awaited<ReturnType<typeof getLeads>>[nu
     lastName: lastNameParts.join(" ") || undefined,
     phone: dbLead.phone ?? undefined,
     email: dbLead.email ?? undefined,
+    contactConsent: parsedNotes.contactConsent,
     propertyAddress: dbLead.address ?? undefined,
     damageType: dbLead.damageType ?? undefined,
     interest: dbLead.damageType ?? undefined,
@@ -465,13 +567,16 @@ function mapDbLeadToIntakeRecord(dbLead: Awaited<ReturnType<typeof getLeads>>[nu
     insuranceClaimStatus: dbLead.claimStatus ?? undefined,
     source: dbLead.source ?? undefined,
     message: parsedNotes.message,
-    customFields: {},
+    customFields: parsedNotes.contactConsent
+      ? { contactConsent: parsedNotes.contactConsent }
+      : {},
     rawSubmission: {
       id: dbLead.id,
       organizationId: parsedNotes.organizationId,
       name: dbLead.name,
       phone: dbLead.phone,
       email: dbLead.email,
+      contactConsent: parsedNotes.contactConsent,
       address: dbLead.address,
       damageType: dbLead.damageType,
       claimStatus: dbLead.claimStatus,

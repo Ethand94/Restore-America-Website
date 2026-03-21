@@ -23,12 +23,17 @@ type LeadSource =
 type QuizField = "damageType" | "isOwner" | "claimFiled";
 
 type QuizFormState = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  address: string;
+  consentToEmail: boolean;
+  consentToText: boolean;
+  consentToAiContact: boolean;
   damageType?: DamageType;
   isOwner?: string;
   claimFiled?: string;
-  name?: string;
-  phone?: string;
-  address?: string;
 };
 
 type DamageOption = {
@@ -101,7 +106,16 @@ export default function InspectionQuizCard({
   subtitle = "Takes 60 seconds · No obligation · We come to you",
 }: InspectionQuizCardProps) {
   const [step, setStep] = useState(0);
-  const [formData, setFormData] = useState<QuizFormState>({});
+  const [formData, setFormData] = useState<QuizFormState>({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    address: "",
+    consentToEmail: false,
+    consentToText: false,
+    consentToAiContact: false,
+  });
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -131,23 +145,40 @@ export default function InspectionQuizCard({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formData.name || !formData.phone) return;
+    const firstName = formData.firstName.trim();
+    const lastName = formData.lastName.trim();
+    const phone = formData.phone.trim();
+    const email = formData.email.trim();
+    const propertyAddress = formData.address.trim();
+
+    if (!firstName || !lastName || !phone || !email || !propertyAddress) return;
 
     const damageLabel =
       damageOptions.find((option) => option.id === formData.damageType)?.label ?? "Other";
+    const fullName = [firstName, lastName].join(" ");
+    const contactConsent = {
+      email: formData.consentToEmail,
+      text: formData.consentToText,
+      aiAgent: formData.consentToAiContact,
+    };
 
     const payload = {
-      fullName: formData.name,
-      phone: formData.phone,
-      propertyAddress: formData.address || undefined,
+      fullName,
+      firstName,
+      lastName,
+      phone,
+      email,
+      propertyAddress,
       damageType: damageLabel,
       propertyOwner: formData.isOwner,
       insuranceClaimStatus: formData.claimFiled,
       source: leadSource,
+      contactConsent,
       formAnswers: {
         step1: damageLabel,
         step2: formData.isOwner,
         step3: formData.claimFiled,
+        contactConsent,
       },
     };
 
@@ -290,20 +321,46 @@ export default function InspectionQuizCard({
 
               {currentStep.type === "contact" && (
                 <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      placeholder="First Name *"
+                      required
+                      value={formData.firstName}
+                      className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B] w-full"
+                      style={{ fontFamily: "Roboto, sans-serif" }}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, firstName: event.target.value }))
+                      }
+                    />
+                    <input
+                      type="text"
+                      placeholder="Last Name *"
+                      required
+                      value={formData.lastName}
+                      className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B] w-full"
+                      style={{ fontFamily: "Roboto, sans-serif" }}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, lastName: event.target.value }))
+                      }
+                    />
+                  </div>
                   <input
-                    type="text"
-                    placeholder="Your Full Name *"
+                    type="email"
+                    placeholder="Email Address *"
                     required
+                    value={formData.email}
                     className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B] w-full"
                     style={{ fontFamily: "Roboto, sans-serif" }}
                     onChange={(event) =>
-                      setFormData((prev) => ({ ...prev, name: event.target.value }))
+                      setFormData((prev) => ({ ...prev, email: event.target.value }))
                     }
                   />
                   <input
                     type="tel"
                     placeholder="Phone Number *"
                     required
+                    value={formData.phone}
                     className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B] w-full"
                     style={{ fontFamily: "Roboto, sans-serif" }}
                     onChange={(event) =>
@@ -314,12 +371,72 @@ export default function InspectionQuizCard({
                     type="text"
                     placeholder="Property Address *"
                     required
+                    value={formData.address}
                     className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B] w-full"
                     style={{ fontFamily: "Roboto, sans-serif" }}
                     onChange={(event) =>
                       setFormData((prev) => ({ ...prev, address: event.target.value }))
                     }
                   />
+                  <div className="border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
+                    <p
+                      className="mb-2 font-semibold uppercase tracking-[0.16em]"
+                      style={{ color: "#1B3A6B", fontFamily: "Oswald, sans-serif" }}
+                    >
+                      Contact Preferences
+                    </p>
+                    <label
+                      className="flex items-start gap-2"
+                      style={{ fontFamily: "Roboto, sans-serif" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.consentToEmail}
+                        onChange={(event) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            consentToEmail: event.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 h-4 w-4 accent-[#1B3A6B]"
+                      />
+                      <span>I agree to receive email updates about my inspection request.</span>
+                    </label>
+                    <label
+                      className="mt-2 flex items-start gap-2"
+                      style={{ fontFamily: "Roboto, sans-serif" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.consentToText}
+                        onChange={(event) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            consentToText: event.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 h-4 w-4 accent-[#1B3A6B]"
+                      />
+                      <span>I agree to receive text messages about my inspection request.</span>
+                    </label>
+                    <label
+                      className="mt-2 flex items-start gap-2"
+                      style={{ fontFamily: "Roboto, sans-serif" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.consentToAiContact}
+                        onChange={(event) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            consentToAiContact: event.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 h-4 w-4 accent-[#1B3A6B]"
+                      />
+                      <span>I am okay being contacted by an AI assistant about this request.</span>
+                    </label>
+                  </div>
                   <button
                     type="submit"
                     disabled={isSubmitting}

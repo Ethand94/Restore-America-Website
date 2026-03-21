@@ -12,12 +12,16 @@ type LeadSource =
   | "other";
 
 type LeadContactFormState = {
-  name: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   email: string;
   address: string;
   damageType: DamageType;
   message: string;
+  consentToEmail: boolean;
+  consentToText: boolean;
+  consentToAiContact: boolean;
 };
 
 type DamageOption = {
@@ -52,31 +56,50 @@ export default function LeadContactFormCard({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState<LeadContactFormState>({
-    name: "",
+    firstName: "",
+    lastName: "",
     phone: "",
     email: "",
     address: "",
     damageType: "roof",
     message: "",
+    consentToEmail: false,
+    consentToText: false,
+    consentToAiContact: false,
   });
 
   const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formData.name.trim() || !formData.phone.trim()) return;
+    const firstName = formData.firstName.trim();
+    const lastName = formData.lastName.trim();
+    const phone = formData.phone.trim();
+    const email = formData.email.trim();
+
+    if (!firstName || !lastName || !phone || !email) return;
 
     const damageLabel =
       damageOptions.find((option) => option.id === formData.damageType)?.label ?? "Other";
+    const fullName = [firstName, lastName].join(" ");
+    const contactConsent = {
+      email: formData.consentToEmail,
+      text: formData.consentToText,
+      aiAgent: formData.consentToAiContact,
+    };
 
     const payload = {
-      fullName: formData.name.trim(),
-      phone: formData.phone.trim(),
-      email: formData.email.trim() || undefined,
+      fullName,
+      firstName,
+      lastName,
+      phone,
+      email,
       propertyAddress: formData.address.trim() || undefined,
       damageType: damageLabel,
       source,
       message: formData.message.trim() || undefined,
+      contactConsent,
       formAnswers: {
         damageType: damageLabel,
+        contactConsent,
       },
     };
 
@@ -87,12 +110,16 @@ export default function LeadContactFormCard({
       await submitWebsiteIntake(payload);
       setSubmitted(true);
       setFormData({
-        name: "",
+        firstName: "",
+        lastName: "",
         phone: "",
         email: "",
         address: "",
         damageType: "roof",
         message: "",
+        consentToEmail: false,
+        consentToText: false,
+        consentToAiContact: false,
       });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to submit intake.");
@@ -133,9 +160,22 @@ export default function LeadContactFormCard({
             <input
               type="text"
               required
-              placeholder="Full Name *"
-              value={formData.name}
-              onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="First Name *"
+              value={formData.firstName}
+              onChange={(event) =>
+                setFormData((prev) => ({ ...prev, firstName: event.target.value }))
+              }
+              className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B]"
+              style={{ fontFamily: "Roboto, sans-serif" }}
+            />
+            <input
+              type="text"
+              required
+              placeholder="Last Name *"
+              value={formData.lastName}
+              onChange={(event) =>
+                setFormData((prev) => ({ ...prev, lastName: event.target.value }))
+              }
               className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B]"
               style={{ fontFamily: "Roboto, sans-serif" }}
             />
@@ -150,7 +190,8 @@ export default function LeadContactFormCard({
             />
             <input
               type="email"
-              placeholder="Email (optional)"
+              required
+              placeholder="Email Address *"
               value={formData.email}
               onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
               className="border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B]"
@@ -189,6 +230,65 @@ export default function LeadContactFormCard({
               className="md:col-span-2 border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-[#1B3A6B] resize-none"
               style={{ fontFamily: "Roboto, sans-serif" }}
             />
+            <div className="md:col-span-2 border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
+              <p
+                className="mb-2 font-semibold uppercase tracking-[0.16em]"
+                style={{ color: "#1B3A6B", fontFamily: "Oswald, sans-serif" }}
+              >
+                Contact Preferences
+              </p>
+              <label
+                className="flex items-start gap-2"
+                style={{ fontFamily: "Roboto, sans-serif" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={formData.consentToEmail}
+                  onChange={(event) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      consentToEmail: event.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[#1B3A6B]"
+                />
+                <span>I agree to receive email updates about my inspection request.</span>
+              </label>
+              <label
+                className="mt-2 flex items-start gap-2"
+                style={{ fontFamily: "Roboto, sans-serif" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={formData.consentToText}
+                  onChange={(event) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      consentToText: event.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[#1B3A6B]"
+                />
+                <span>I agree to receive text messages about my inspection request.</span>
+              </label>
+              <label
+                className="mt-2 flex items-start gap-2"
+                style={{ fontFamily: "Roboto, sans-serif" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={formData.consentToAiContact}
+                  onChange={(event) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      consentToAiContact: event.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[#1B3A6B]"
+                />
+                <span>I am okay being contacted by an AI assistant about this request.</span>
+              </label>
+            </div>
             <button
               type="submit"
               disabled={isSubmitting}
